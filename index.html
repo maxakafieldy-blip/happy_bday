@@ -238,6 +238,8 @@
       });
       csvContent += row.join(',') + '\n';
     });
+    };
+      
 async function updateCSVOnGitHub(newData) {
   try {
     const response = await fetch('https://api.github.com/repos/maxakafieldy-blip/happy_bday/dispatches', {
