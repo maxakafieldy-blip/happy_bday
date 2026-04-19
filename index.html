@@ -164,11 +164,6 @@
         <p>Бронь оформляется без сбора персональных данных.</p>
     </footer>    
 <script>
-  // ВАЖНО: Убедитесь, что этот URL совпадает с URL вашего развернутого Apps Script
-  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzru6SoqsTtOYq88pP__1SGZYv7gYAOxReO9lfSt7b9ZJkh7D3D2-nA6D_HBZGp0b2RqQ/exec';
-
-  let characters = []; // Здесь храним данные, полученные из таблицы
-
   // --- Элементы DOM ---
   const charList = document.getElementById('character-list');
   const modal = document.getElementById('modal-overlay');
@@ -177,49 +172,86 @@
   const clearNameBtn = document.getElementById('clear-name');
   const clearCartoonBtn = document.getElementById('clear-cartoon');
 
-  // --- Загрузка данных из Google Таблицы ---
-  async function loadCharacters() {
+  // --- Состояние ---
+  let characters = []; // Здесь будут храниться персонажи
+
+  // --- Загрузка данных из CSV файла ---
+  async function loadCharactersFromCSV() {
     try {
-      const response = await fetch(WEB_APP_URL);
-      if (!response.ok) throw new Error(`Ошибка сети: ${response.status}`);
-      const data = await response.json();
-      characters = data;
+      const response = await fetch('character.csv'); // Путь к нашему файлу
+      if (!response.ok) throw new Error("Файл CSV не найден");
+      
+      const csvText = await response.text();
+      characters = parseCSV(csvText);
       render(); // Отрисовываем интерфейс после загрузки
     } catch (e) {
-      console.error('Не удалось загрузить данные:', e);
-      alert('Ошибка загрузки данных. Проверьте консоль (F12).');
-      // Если таблица недоступна, показываем заглушку
+      console.error('Ошибка загрузки CSV:', e);
+      // Если файл не найден, используем резервные данные
       characters = [
         {name: 'Микки Маус', cartoon: 'Клуб Микки Мауса', booked: true},
-        {name: 'Минни Маус', cartoon: 'Клуб Микки Мауса'},
-        {name: 'Дональд Дак', cartoon: 'Утиные Истории'},
-        {name: 'Гуфи', cartoon: 'Клуб Микки Мауса'}
+        {name: 'Минни Маус', cartoon: 'Клуб Микки Мауса', booked: false},
+        {name: 'Дональд Дак', cartoon: 'Утиные Истории', booked: false},
+        {name: 'Гуфи', cartoon: 'Клуб Микки Мауса', booked: false}
       ];
       render();
     }
   }
 
-  // --- Сохранение данных в Google Таблицу ---
-  async function saveToSheet(dataObject) {
-    try {
-      const response = await fetch(WEB_APP_URL, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(dataObject)
-      });
-      if (!response.ok) throw new Error(`Ошибка сохранения: ${response.status}`);
+  // --- Парсинг CSV текста в массив объектов ---
+  function parseCSV(text) {
+    const lines = text.trim().split('\n');
+    const headers = lines[0].split(',');
+    
+    return lines.slice(1).map(line => {
+      const values = line.split(',');
+      const obj = {};
       
-      // После успешной операции перезагружаем данные, чтобы получить ID новой строки (если это был POST)
-      await loadCharacters();
-    } catch (e) {
-      console.error('Ошибка записи в таблицу:', e);
-      alert('Не удалось сохранить данные. Проверьте консоль.');
-    }
+      headers.forEach((header, i) => {
+        let value = values[i] || '';
+        
+        // Преобразуем строку "true" или "false" в логический тип
+        if (value === 'true') value = true;
+        if (value === 'false') value = false;
+        
+        obj[header.trim()] = value.trim();
+      });
+      
+      return obj;
+    });
   }
 
+  // --- Сохранение данных обратно в CSV (для сохранения брони) ---
+  function saveCharactersToCSV() {
+    if (characters.length === 0) return;
+    
+    // Собираем заголовки из первого объекта
+    const headers = Object.keys(characters[0]);
+    let csvContent = headers.join(',') + '\n';
+    
+    // Собираем строки данных
+    characters.forEach(char => {
+      const row = headers.map(h => {
+        let val = char[h];
+        // Преобразуем булевы значения обратно в строки для записи
+        if (val === true || val === false) val = val.toString();
+        return `"${val}"`; // Кавычки на случай, если в тексте будут запятые
+      });
+      csvContent += row.join(',') + '\n';
+    });
+    
+    // Создаем файл для скачивания
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'character.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  
   // --- Отрисовка карточек персонажей ---
   function render() {
-    charList.innerHTML = ''; // Очищаем список перед отрисовкой
+    charList.innerHTML = '';
 
     characters.forEach(char => {
       const card = document.createElement('div');
@@ -233,24 +265,26 @@
         </div>
       `;
 
-      // Если персонаж свободен, добавляем обработчик клика для бронирования
       if (!char.booked) {
-        card.addEventListener('click', async () => {
-          // Создаем объект для обновления (Apps Script обновит строку по ID)
-          const updateData = { ...char, booked: true };
-          await saveToSheet(updateData);
-          // render() вызовется внутри saveToSheet после успешной загрузки
+        card.addEventListener('click', () => {
+          const foundChar = characters.find(c => c.name === char.name);
+          if (foundChar) {
+            foundChar.booked = true;
+            render(); // Обновляем интерфейс
+            saveCharactersToCSV(); // Сохраняем изменения в файл
+            alert(`Персонаж "${char.name}" забронирован!`);
+          }
         });
       }
       
       charList.appendChild(card);
     });
 
-    // Добавляем карточку "Добавить своего"
+    // Карточка "Добавить своего"
     const addCard = document.createElement('div');
     addCard.className = 'card add-new';
     addCard.innerHTML = `
-      <img alt="+" id="019da511-6539-7e9b-b7ca-4e8708732258">
+      <img alt="+" id="019da56a-12bd-7581-9047-b3d8c430ce30">
        <div class="card-content">
            <h3>Добавить своего</h3>
            <p>Не нашли нужного героя?</p>
@@ -259,6 +293,7 @@
      addCard.addEventListener('click', () => openModal());
      charList.appendChild(addCard);
    }
+
 
    // --- Логика модального окна ---
    function openModal(name = '', cartoon = '') {
@@ -277,8 +312,9 @@
      clearCartoonBtn.style.display = 'none';
    }
 
+
    // --- Обработка формы "Добавить своего" ---
-   document.getElementById('submit-bron').addEventListener('click', async () => {
+   document.getElementById('submit-bron').addEventListener('click', () => {
      const name = charNameInput.value.trim();
      const cartoon = cartoonNameInput.value.trim();
      
@@ -287,28 +323,29 @@
        return;
      }
      
-     // Проверка на дубликат в текущем списке
      const isDuplicate = characters.some(c => c.name.toLowerCase() === name.toLowerCase());
      if (isDuplicate) {
        alert('Персонаж с таким именем уже есть в каталоге.');
        return;
      }
      
-     // Создаем объект для отправки через POST (Apps Script добавит новую строку)
-     const newCharacter = { name, cartoon, booked: true };
+     characters.push({name, cartoon, booked: true});
      
-     await saveToSheet(newCharacter); // Отправляем данные
-     closeModal(); // Закрываем окно
+     closeModal();
+     render();
+     saveCharactersToCSV(); // Сохраняем нового персонажа в файл
      
-     // render() вызовется внутри saveToSheet после успешной загрузки
+     alert(`Персонаж "${name}" добавлен в бронь!`);
    });
+
 
    // --- Обработчики закрытия окна ---
    document.getElementById('cancel-bron').addEventListener('click', closeModal);
    document.querySelector('.close-btn').addEventListener('click', closeModal);
    modal.addEventListener('click', (e) => e.target === modal && closeModal());
 
-   // --- Обработчики для кнопок очистки полей ---
+
+   // --- Кнопки очистки полей ---
    [clearNameBtn, clearCartoonBtn].forEach(btn => {
      btn.addEventListener('click', () => {
        const inputId = btn.id.replace('clear-', '');
@@ -316,6 +353,7 @@
        btn.style.display = 'none';
      });
    });
+
    [charNameInput, cartoonNameInput].forEach(input => {
      input.addEventListener('input', () => {
        const clearBtnId = `clear-${input.id}`;
@@ -323,8 +361,9 @@
      });
    });
 
-   // Запускаем приложение при загрузке страницы
-   loadCharacters();
+
+   // Запуск приложения при загрузке страницы
+   loadCharactersFromCSV();
 </script>
 </body>
 </html>
