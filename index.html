@@ -163,88 +163,58 @@
     <footer style="background:#4b0082; color:#ffd700!important;" class="container">
         <p>Бронь оформляется без сбора персональных данных.</p>
     </footer>    
+    
 <script>
+  // --- ВАЖНО! ---
+  // Замените этот URL на URL вашего развернутого Web App из Google Apps Script.
+  // Вы найдете его после нажатия Deploy -> New deployment -> Web app.
+  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzru6SoqsTtOYq88pP__1SGZYv7gYAOxReO9lfSt7b9ZJkh7D3D2-nA6D_HBZGp0b2RqQ/exec';
+
   // --- Элементы DOM ---
   const charList = document.getElementById('character-list');
   const modal = document.getElementById('modal-overlay');
   const charNameInput = document.getElementById('char-name');
   const cartoonNameInput = document.getElementById('cartoon-name');
-  const clearNameBtn = document.getElementById('clear-name');
-  const clearCartoonBtn = document.getElementById('clear-cartoon');
 
-  // --- Состояние ---
-  let characters = []; // Здесь будут храниться персонажи
+  let characters = []; // Данные из таблицы
 
-  // --- Загрузка данных из CSV файла ---
-  async function loadCharactersFromCSV() {
+  // --- ЗАГРУЗКА ДАННЫХ ИЗ GOOGLE ТАБЛИЦЫ ---
+  async function loadCharacters() {
     try {
-      const response = await fetch('character.csv'); // Путь к нашему файлу
-      if (!response.ok) throw new Error("Файл CSV не найден");
+      const response = await fetch(WEB_APP_URL);
+      if (!response.ok) throw new Error("Ошибка сети");
       
-      const csvText = await response.text();
-      characters = parseCSV(csvText);
-      render(); // Отрисовываем интерфейс после загрузки
-    } catch (e) {
-      console.error('Ошибка загрузки CSV:', e);
-      // Если файл не найден, используем резервные данные
-      characters = [
-        {name: 'Микки Маус', cartoon: 'Клуб Микки Мауса', booked: true},
-        {name: 'Минни Маус', cartoon: 'Клуб Микки Мауса', booked: false},
-        {name: 'Дональд Дак', cartoon: 'Утиные Истории', booked: false},
-        {name: 'Гуфи', cartoon: 'Клуб Микки Мауса', booked: false}
-      ];
+      characters = await response.json();
       render();
+    } catch (e) {
+      console.error('Ошибка загрузки:', e);
+      alert('Не удалось загрузить список персонажей. Проверьте консоль.');
     }
   }
 
-  // --- Парсинг CSV текста в массив объектов ---
-  function parseCSV(text) {
-    const lines = text.trim().split('\n');
-    const headers = lines[0].split(',');
-    
-    return lines.slice(1).map(line => {
-      const values = line.split(',');
-      const obj = {};
-      
-      headers.forEach((header, i) => {
-        let value = values[i] || '';
-        
-        // Преобразуем строку "true" или "false" в логический тип
-        if (value === 'true') value = true;
-        if (value === 'false') value = false;
-        
-        obj[header.trim()] = value.trim();
+  // --- ОТПРАВКА ДАННЫХ В GOOGLE ТАБЛИЦУ ---
+  async function saveToSheet(dataObject) {
+    try {
+      const response = await fetch(WEB_APP_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(dataObject)
       });
       
-      return obj;
-    });
+      if (!response.ok) throw new Error("Ошибка сохранения");
+      
+      // После успешной записи перезагружаем данные, чтобы увидеть изменения
+      await loadCharacters();
+      
+    } catch (e) {
+      console.error('Ошибка записи:', e);
+    }
   }
 
-  // --- Сохранение данных обратно в CSV (для сохранения брони) ---
-  function saveCharactersToCSV() {
-    if (characters.length === 0) return;
-    
-    // Собираем заголовки из первого объекта
-    const headers = Object.keys(characters[0]);
-    let csvContent = headers.join(',') + '\n';
-    
-    // Собираем строки данных
-    characters.forEach(char => {
-      const row = headers.map(h => {
-        let val = char[h];
-        // Преобразуем булевы значения обратно в строки для записи
-        if (val === true || val === false) val = val.toString();
-        return `"${val}"`; // Кавычки на случай, если в тексте будут запятые
-      });
-      csvContent += row.join(',') + '\n';
-    });
-    };     
-
-  
-  // --- Отрисовка карточек персонажей ---
+  // --- ОТРИСОВКА КАРТОЧЕК ---
   function render() {
     charList.innerHTML = '';
-
+    
     characters.forEach(char => {
       const card = document.createElement('div');
       card.className = `card ${char.booked ? 'unavailable' : ''}`;
@@ -258,25 +228,21 @@
       `;
 
       if (!char.booked) {
-        card.addEventListener('click', () => {
-          const foundChar = characters.find(c => c.name === char.name);
-          if (foundChar) {
-            foundChar.booked = true;
-            render(); // Обновляем интерфейс
-            saveCharactersToCSV(); // Сохраняем изменения в файл
-            alert(`Персонаж "${char.name}" забронирован!`);
-          }
+        card.addEventListener('click', async () => {
+          // Создаем объект для обновления статуса на "забронирован"
+          const updateData = { ...char, booked: true };
+          await saveToSheet(updateData);
         });
       }
       
       charList.appendChild(card);
     });
 
-    // Карточка "Добавить своего"
+    // Кнопка "Добавить своего"
     const addCard = document.createElement('div');
     addCard.className = 'card add-new';
     addCard.innerHTML = `
-      <img alt="+" id="019da56a-12bd-7581-9047-b3d8c430ce30">
+      <img src="https://placehold.co/300x250/4b0082/white?text=+" alt="+">
        <div class="card-content">
            <h3>Добавить своего</h3>
            <p>Не нашли нужного героя?</p>
@@ -286,27 +252,21 @@
      charList.appendChild(addCard);
    }
 
-
-   // --- Логика модального окна ---
+   // --- МОДАЛЬНОЕ ОКНО ---
    function openModal(name = '', cartoon = '') {
      modal.style.display = 'flex';
      charNameInput.value = name || '';
      cartoonNameInput.value = cartoon || '';
-     clearNameBtn.style.display = name ? 'block' : 'none';
-     clearCartoonBtn.style.display = cartoon ? 'block' : 'none';
    }
 
    function closeModal() {
      modal.style.display = 'none';
      charNameInput.value = '';
      cartoonNameInput.value = '';
-     clearNameBtn.style.display = 'none';
-     clearCartoonBtn.style.display = 'none';
    }
 
-
-   // --- Обработка формы "Добавить своего" ---
-   document.getElementById('submit-bron').addEventListener('click', () => {
+   // --- ОБРАБОТКА ФОРМЫ ДОБАВЛЕНИЯ ---
+   document.getElementById('submit-bron').addEventListener('click', async () => {
      const name = charNameInput.value.trim();
      const cartoon = cartoonNameInput.value.trim();
      
@@ -318,84 +278,24 @@
      const isDuplicate = characters.some(c => c.name.toLowerCase() === name.toLowerCase());
      if (isDuplicate) {
        alert('Персонаж с таким именем уже есть в каталоге.');
+       closeModal();
        return;
      }
      
-     characters.push({name, cartoon, booked: true});
+     // Создаем нового персонажа и сразу помечаем как забронированный
+     const newChar = {name, cartoon, booked: true};
      
+     await saveToSheet(newChar); // Отправляем на сервер
      closeModal();
-     render();
-     saveCharactersToCSV(); // Сохраняем нового персонажа в файл
-     
-     alert(`Персонаж "${name}" добавлен в бронь!`);
    });
 
-
-   // --- Обработчики закрытия окна ---
+   // Закрытие окна (крестик, фон, кнопка Отмена)
    document.getElementById('cancel-bron').addEventListener('click', closeModal);
    document.querySelector('.close-btn').addEventListener('click', closeModal);
    modal.addEventListener('click', (e) => e.target === modal && closeModal());
 
-
-   // --- Кнопки очистки полей ---
-   [clearNameBtn, clearCartoonBtn].forEach(btn => {
-     btn.addEventListener('click', () => {
-       const inputId = btn.id.replace('clear-', '');
-       document.getElementById(inputId).value = '';
-       btn.style.display = 'none';
-     });
-   });
-
-   [charNameInput, cartoonNameInput].forEach(input => {
-     input.addEventListener('input', () => {
-       const clearBtnId = `clear-${input.id}`;
-       document.getElementById(clearBtnId).style.display = input.value ? 'block' : 'none';
-     });
-   });
-    
-// Эту функцию нужно вызвать после успешного бронирования или добавления
-async function saveChangesToGitHub() {
-  // 1. Собираем все данные обратно в CSV строку (как мы делали для скачивания)
-  const headers = Object.keys(characters[0]);
-  let csvContent = headers.join(',') + '\n';
-  characters.forEach(char => {
-    const row = headers.map(h => {
-      let val = char[h];
-      if (val === true || val === false) val = val.toString();
-      return `"${val}"`;
-    });
-    csvContent += row.join(',') + '\n';
-  });
-
-  // 2. Отправляем POST запрос на GitHub Dispatches
-  try {
-    const response = await fetch('https://api.github.com/repos/maxakafieldy-blip/happy_bday/dispatches', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer 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', // ВАЖНО: Используйте Bearer вместо ghp_
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        event_type: 'update-csv', // Тип события
-        client_payload: {
-          csv_data: csvContent // Передаем нашу строку
-        }
-      })
-    });
-
-    if (response.ok) {
-      console.log('Событие отправлено! GitHub Action скоро обновит файл.');
-    } else {
-      console.error('Ошибка отправки:', await response.text());
-    }
-  } catch (e) {
-    console.error('Ошибка сети:', e);
-  }
-}
-
    // Запуск приложения при загрузке страницы
-   loadCharactersFromCSV();
+   loadCharacters();
 </script>
 </body>
 </html>
