@@ -164,10 +164,11 @@
         <p>Бронь оформляется без сбора персональных данных.</p>
     </footer>    
     
-<script>
-  // --- ВАЖНО! ---
-  // Замените этот URL на URL вашего развернутого Web App из Google Apps Script.
-  const WEB_APP_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYED_SCRIPT_ID/exec';
+
+  // ВАЖНО: Убедитесь, что этот URL совпадает с URL вашего развернутого Apps Script
+  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbztAsiYHjFMxAbiUemF15WAOvpM1rj13JODmLWHSAqc4t7xgExCgmuN7Ks9jLwfXWMq-A/exec';
+
+  let characters = []; // Здесь храним данные, полученные из таблицы
 
   // --- Элементы DOM ---
   const charList = document.getElementById('character-list');
@@ -177,23 +178,29 @@
   const clearNameBtn = document.getElementById('clear-name');
   const clearCartoonBtn = document.getElementById('clear-cartoon');
 
-  let characters = []; // Данные из таблицы
-
-  // --- ЗАГРУЗКА ДАННЫХ ИЗ GOOGLE ТАБЛИЦЫ ---
+  // --- Загрузка данных из Google Таблицы ---
   async function loadCharacters() {
     try {
       const response = await fetch(WEB_APP_URL);
-      if (!response.ok) throw new Error("Ошибка сети");
-      
-      characters = await response.json();
-      render();
+      if (!response.ok) throw new Error(`Ошибка сети: ${response.status}`);
+      const data = await response.json();
+      characters = data;
+      render(); // Отрисовываем интерфейс после загрузки
     } catch (e) {
-      console.error('Ошибка загрузки:', e);
-      alert('Не удалось загрузить список персонажей. Проверьте консоль.');
+      console.error('Не удалось загрузить данные:', e);
+      alert('Ошибка загрузки данных. Проверьте консоль (F12).');
+      // Если таблица недоступна, показываем заглушку
+      characters = [
+        {name: 'Микки Маус', cartoon: 'Клуб Микки Мауса', booked: true},
+        {name: 'Минни Маус', cartoon: 'Клуб Микки Мауса'},
+        {name: 'Дональд Дак', cartoon: 'Утиные Истории'},
+        {name: 'Гуфи', cartoon: 'Клуб Микки Мауса'}
+      ];
+      render();
     }
   }
 
-  // --- ОТПРАВКА ДАННЫХ В GOOGLE ТАБЛИЦУ ---
+  // --- Сохранение данных в Google Таблицу ---
   async function saveToSheet(dataObject) {
     try {
       const response = await fetch(WEB_APP_URL, {
@@ -201,21 +208,20 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(dataObject)
       });
+      if (!response.ok) throw new Error(`Ошибка сохранения: ${response.status}`);
       
-      if (!response.ok) throw new Error("Ошибка сохранения");
-      
-      // После успешной записи перезагружаем данные для актуализации списка
+      // После успешной операции перезагружаем данные, чтобы получить ID новой строки (если это был POST)
       await loadCharacters();
-      
     } catch (e) {
-      console.error('Ошибка записи:', e);
+      console.error('Ошибка записи в таблицу:', e);
+      alert('Не удалось сохранить данные. Проверьте консоль.');
     }
   }
 
-  // --- ОТРИСОВКА КАРТОЧЕК ---
+  // --- Отрисовка карточек персонажей ---
   function render() {
-    charList.innerHTML = '';
-    
+    charList.innerHTML = ''; // Очищаем список перед отрисовкой
+
     characters.forEach(char => {
       const card = document.createElement('div');
       card.className = `card ${char.booked ? 'unavailable' : ''}`;
@@ -228,22 +234,24 @@
         </div>
       `;
 
+      // Если персонаж свободен, добавляем обработчик клика для бронирования
       if (!char.booked) {
         card.addEventListener('click', async () => {
-          // Создаем объект для обновления статуса на "забронирован"
+          // Создаем объект для обновления (Apps Script обновит строку по ID)
           const updateData = { ...char, booked: true };
           await saveToSheet(updateData);
+          // render() вызовется внутри saveToSheet после успешной загрузки
         });
       }
       
       charList.appendChild(card);
     });
 
-    // Кнопка "Добавить своего"
+    // Добавляем карточку "Добавить своего"
     const addCard = document.createElement('div');
     addCard.className = 'card add-new';
     addCard.innerHTML = `
-      <img alt="+" id="019da5f0-f2f1-7bda-8771-b31cb6320b54">
+      <img alt="+" id="019da511-6539-7e9b-b7ca-4e8708732258">
        <div class="card-content">
            <h3>Добавить своего</h3>
            <p>Не нашли нужного героя?</p>
@@ -253,7 +261,7 @@
      charList.appendChild(addCard);
    }
 
-   // --- МОДАЛЬНОЕ ОКНО ---
+   // --- Логика модального окна ---
    function openModal(name = '', cartoon = '') {
      modal.style.display = 'flex';
      charNameInput.value = name || '';
@@ -270,7 +278,7 @@
      clearCartoonBtn.style.display = 'none';
    }
 
-   // --- ОБРАБОТКА ФОРМЫ ДОБАВЛЕНИЯ ---
+   // --- Обработка формы "Добавить своего" ---
    document.getElementById('submit-bron').addEventListener('click', async () => {
      const name = charNameInput.value.trim();
      const cartoon = cartoonNameInput.value.trim();
@@ -280,26 +288,28 @@
        return;
      }
      
+     // Проверка на дубликат в текущем списке
      const isDuplicate = characters.some(c => c.name.toLowerCase() === name.toLowerCase());
      if (isDuplicate) {
        alert('Персонаж с таким именем уже есть в каталоге.');
-       closeModal();
        return;
      }
      
-     // Создаем нового персонажа и сразу помечаем как забронированный
-     const newChar = {name, cartoon, booked: true};
+     // Создаем объект для отправки через POST (Apps Script добавит новую строку)
+     const newCharacter = { name, cartoon, booked: true };
      
-     await saveToSheet(newChar); // Отправляем на сервер
-     closeModal();
+     await saveToSheet(newCharacter); // Отправляем данные
+     closeModal(); // Закрываем окно
+     
+     // render() вызовется внутри saveToSheet после успешной загрузки
    });
 
-   // Закрытие окна (крестик, фон, кнопка Отмена)
+   // --- Обработчики закрытия окна ---
    document.getElementById('cancel-bron').addEventListener('click', closeModal);
    document.querySelector('.close-btn').addEventListener('click', closeModal);
    modal.addEventListener('click', (e) => e.target === modal && closeModal());
 
-   // Кнопки очистки полей
+   // --- Обработчики для кнопок очистки полей ---
    [clearNameBtn, clearCartoonBtn].forEach(btn => {
      btn.addEventListener('click', () => {
        const inputId = btn.id.replace('clear-', '');
@@ -314,8 +324,8 @@
      });
    });
 
-   // Запуск приложения при загрузке страницы
+   // Запускаем приложение при загрузке страницы
    loadCharacters();
-</script>
+
 </body>
 </html>
