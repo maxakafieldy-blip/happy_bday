@@ -178,7 +178,7 @@
   // --- Загрузка данных из CSV файла ---
   async function loadCharactersFromCSV() {
     try {
-      const response = await fetch('character.csv'); // Путь к нашему файлу
+      const response = await fetch('happy_bday/character.csv'); // Путь к нашему файлу
       if (!response.ok) throw new Error("Файл CSV не найден");
       
       const csvText = await response.text();
