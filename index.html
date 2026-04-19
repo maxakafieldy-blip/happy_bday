@@ -167,14 +167,15 @@
 <script>
   // --- ВАЖНО! ---
   // Замените этот URL на URL вашего развернутого Web App из Google Apps Script.
-  // Вы найдете его после нажатия Deploy -> New deployment -> Web app.
-  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzru6SoqsTtOYq88pP__1SGZYv7gYAOxReO9lfSt7b9ZJkh7D3D2-nA6D_HBZGp0b2RqQ/exec';
+  const WEB_APP_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYED_SCRIPT_ID/exec';
 
   // --- Элементы DOM ---
   const charList = document.getElementById('character-list');
   const modal = document.getElementById('modal-overlay');
   const charNameInput = document.getElementById('char-name');
   const cartoonNameInput = document.getElementById('cartoon-name');
+  const clearNameBtn = document.getElementById('clear-name');
+  const clearCartoonBtn = document.getElementById('clear-cartoon');
 
   let characters = []; // Данные из таблицы
 
@@ -203,7 +204,7 @@
       
       if (!response.ok) throw new Error("Ошибка сохранения");
       
-      // После успешной записи перезагружаем данные, чтобы увидеть изменения
+      // После успешной записи перезагружаем данные для актуализации списка
       await loadCharacters();
       
     } catch (e) {
@@ -242,7 +243,7 @@
     const addCard = document.createElement('div');
     addCard.className = 'card add-new';
     addCard.innerHTML = `
-      <img src="https://placehold.co/300x250/4b0082/white?text=+" alt="+">
+      <img alt="+" id="019da5f0-f2f1-7bda-8771-b31cb6320b54">
        <div class="card-content">
            <h3>Добавить своего</h3>
            <p>Не нашли нужного героя?</p>
@@ -257,12 +258,16 @@
      modal.style.display = 'flex';
      charNameInput.value = name || '';
      cartoonNameInput.value = cartoon || '';
+     clearNameBtn.style.display = name ? 'block' : 'none';
+     clearCartoonBtn.style.display = cartoon ? 'block' : 'none';
    }
 
    function closeModal() {
      modal.style.display = 'none';
      charNameInput.value = '';
      cartoonNameInput.value = '';
+     clearNameBtn.style.display = 'none';
+     clearCartoonBtn.style.display = 'none';
    }
 
    // --- ОБРАБОТКА ФОРМЫ ДОБАВЛЕНИЯ ---
@@ -293,6 +298,21 @@
    document.getElementById('cancel-bron').addEventListener('click', closeModal);
    document.querySelector('.close-btn').addEventListener('click', closeModal);
    modal.addEventListener('click', (e) => e.target === modal && closeModal());
+
+   // Кнопки очистки полей
+   [clearNameBtn, clearCartoonBtn].forEach(btn => {
+     btn.addEventListener('click', () => {
+       const inputId = btn.id.replace('clear-', '');
+       document.getElementById(inputId).value = '';
+       btn.style.display = 'none';
+     });
+   });
+   [charNameInput, cartoonNameInput].forEach(input => {
+     input.addEventListener('input', () => {
+       const clearBtnId = `clear-${input.id}`;
+       document.getElementById(clearBtnId).style.display = input.value ? 'block' : 'none';
+     });
+   });
 
    // Запуск приложения при загрузке страницы
    loadCharacters();
