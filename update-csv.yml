@@ -1,18 +1,60 @@
-name: Update CSV File
+# Имя нашего процесса (может быть любым)
+name: Обновление CSV
+
+# Когда запускать? При событии 'dispatches'
 on:
   repository_dispatch:
     types: [update-csv]
+
 jobs:
-  update-csv:
+  update-file:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Update CSV
-        run: |
-          echo "${{ github.event.client_payload.csv_data }}" > data.csv
-      - name: Commit and push
-        uses: stefanzweifel/git-auto-commit-action@v4
+      # Шаг 1: Проверить код (клонировать репозиторий)
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      # Шаг 2: Установить Node.js, чтобы запустить скрипт
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          commit_message: 'Update CSV via API'
-          file_pattern: data.csv
-          branch: main
+          node-version: '20'
+      
+      # Шаг 3: Установить зависимости (нам нужна библиотека для работы с Git)
+      - name: Install dependencies
+        run: npm install @actions/github
+
+      # Шаг 4: Запустить наш скрипт обновления
+      - name: Update CSV file
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Токен для доступа к репозиторию
+        run: |
+          # Создаем файл скрипта update.js на лету
+          echo "const fs = require('fs');
+          const { GitHub, context } = require('@actions/github');
+          
+          // Получаем данные из события
+          const payload = context.payload.client_payload;
+          const csvData = payload.csv_data;
+          
+          // Записываем данные в файл
+          fs.writeFileSync('character.csv', csvData);
+          
+          // Получаем Octokit для работы с API
+          const octokit = new GitHub(process.env.GITHUB_TOKEN);
+          
+          // Читаем файл для отправки
+          const content = fs.readFileSync('characters.csv', 'utf8');
+          const contentBase64 = Buffer.from(content).toString('base64');
+          
+          // Создаем коммит
+          octokit.rest.repos.createOrUpdateFileContents({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            path: 'character.csv',
+            message: 'Автоматическое обновление брони', // Сообщение коммита
+            content: contentBase64,
+            // Получаем SHA текущего файла, чтобы обновить его, а не создать новый
+            sha: '${{ github.event.client_payload.sha }}' 
+          });" > update.js && node update.js
